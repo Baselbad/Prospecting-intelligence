@@ -15,6 +15,7 @@ let graph = buildGraph(result);
 let collapsed = new Set(result.groups.filter(group => !["group-competitors", "group-distributors"].includes(group.id)).map(group => group.id));
 let selectedId = null;
 let keyboardId = result.center.id;
+let inspectorTriggerId = null;
 let view = { x: 0, y: 0, scale: 1 };
 let drag = null;
 
@@ -26,7 +27,9 @@ for (const sector of SECTORS) {
 
 function svgEl(name, attrs = {}) {
   const el = document.createElementNS(SVG_NS, name);
-  for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, String(value));
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value !== undefined && value !== null) el.setAttribute(key, String(value));
+  }
   return el;
 }
 
@@ -131,9 +134,17 @@ function activateNode(node) {
   selectedId = node.id;
   keyboardId = node.id;
   if (node.expandable) collapsed.has(node.id) ? collapsed.delete(node.id) : collapsed.add(node.id);
-  if (["company", "evidence", "draft"].includes(node.kind)) openInspector(node);
+  const opensInspector = ["company", "evidence", "draft"].includes(node.kind);
+  if (opensInspector) inspectorTriggerId = node.id;
   render();
-  requestAnimationFrame(() => elements.nodes.querySelector(`[data-id="${CSS.escape(node.id)}"]`)?.focus());
+  if (opensInspector) openInspector(node);
+  else requestAnimationFrame(() => focusNode(node.id));
+}
+
+function focusNode(nodeId) {
+  const node = elements.nodes.querySelector(`[data-id="${CSS.escape(nodeId)}"]`);
+  if (node) node.focus();
+  else elements["mindmap-svg"].focus();
 }
 
 function safeUrl(value) {
@@ -152,6 +163,24 @@ function openInspector(node) {
   if (node.kind === "company") body.append(companyDetails(node));
   else if (node.kind === "draft") body.append(draftDetails(node));
   else body.append(evidenceDetails(node));
+  requestAnimationFrame(() => elements["close-inspector"].focus());
+}
+
+function closeInspector({ restoreFocus = true } = {}) {
+  if (elements.inspector.hidden) return;
+  const triggerId = inspectorTriggerId;
+  elements.inspector.hidden = true;
+  selectedId = null;
+  inspectorTriggerId = null;
+  render();
+  if (restoreFocus && triggerId) requestAnimationFrame(() => focusNode(triggerId));
+}
+
+function closeLegend({ restoreFocus = true } = {}) {
+  if (elements["legend-panel"].hidden) return;
+  elements["legend-panel"].hidden = true;
+  elements["legend-button"].setAttribute("aria-expanded", "false");
+  if (restoreFocus) elements["legend-button"].focus();
 }
 
 function companyDetails(company) {
@@ -278,6 +307,7 @@ async function submitQuery(event) {
     graph = buildGraph(result);
     collapsed = new Set(result.groups.filter(group => !["group-competitors", "group-distributors"].includes(group.id)).map(group => group.id));
     selectedId = null; keyboardId = result.center.id;
+    inspectorTriggerId = null;
     elements.inspector.hidden = true;
     render();
     if (!result.companies.length) showState("empty", "No retained prospects matched this demo query. Connect the production API or try RATIONAL, UNOX, or Kitchen Technology.");
@@ -303,8 +333,8 @@ elements["query-form"].addEventListener("submit", submitQuery);
 for (const id of ["map-search", "sector-filter", "country-filter", "tier-filter", "status-filter"]) elements[id].addEventListener("input", () => { render(); });
 elements["reset-filters"].addEventListener("click", () => { elements["map-search"].value = ""; for (const id of ["sector-filter", "country-filter", "tier-filter", "status-filter"]) elements[id].value = "all"; render(); fitView(); });
 elements["legend-button"].addEventListener("click", () => { const open = elements["legend-panel"].hidden; elements["legend-panel"].hidden = !open; elements["legend-button"].setAttribute("aria-expanded", String(open)); });
-document.querySelector(".close-legend").addEventListener("click", () => { elements["legend-panel"].hidden = true; elements["legend-button"].setAttribute("aria-expanded", "false"); });
-elements["close-inspector"].addEventListener("click", () => { elements.inspector.hidden = true; selectedId = null; render(); });
+document.querySelector(".close-legend").addEventListener("click", () => closeLegend());
+elements["close-inspector"].addEventListener("click", () => closeInspector());
 elements["zoom-in"].addEventListener("click", () => setZoom(view.scale * 1.18));
 elements["zoom-out"].addEventListener("click", () => setZoom(view.scale / 1.18));
 elements["fit-view"].addEventListener("click", fitView);
@@ -324,7 +354,17 @@ elements["mindmap-svg"].addEventListener("keydown", event => {
   if (event.key === "-") setZoom(view.scale / 1.18);
   if (event.key === "0") fitView();
 });
+document.addEventListener("keydown", event => {
+  if (event.key !== "Escape") return;
+  const inspectorOpen = !elements.inspector.hidden;
+  const legendOpen = !elements["legend-panel"].hidden;
+  if (!inspectorOpen && !legendOpen) return;
+  event.preventDefault();
+  if (inspectorOpen) closeInspector();
+  if (legendOpen) closeLegend({ restoreFocus: !inspectorOpen });
+});
 window.addEventListener("resize", () => requestAnimationFrame(fitView));
 
 render();
 requestAnimationFrame(fitView);
+

@@ -6,7 +6,7 @@ The repository contains no contact dataset, API credential, or secret. With no A
 
 ## Local setup
 
-Requirements: Node.js 20 or newer. There are no third-party runtime packages to install.
+Requirements: Node.js 20 or newer. The production interface has no third-party runtime packages; development dependencies provide browser and accessibility testing.
 
 ```bash
 cp .env.example .env
@@ -24,9 +24,19 @@ npm run check
 
 `npm test` uses Node's built-in test runner. `npm run build` writes a deployment-ready static bundle to `dist/`.
 
+Browser checks require the pinned Playwright browser:
+
+```bash
+npx playwright install chromium
+npm run test:browser
+npm run test:a11y
+```
+
 ## API configuration
 
-Set `PROSPECTING_API_URL` in the runtime or deployment platform environment. It must be a browser-accessible, CORS-enabled endpoint. Do not put bearer tokens or other secrets in this value or in frontend code. If the upstream service requires confidential authentication, place a same-origin server-side proxy in front of it and keep credentials in that platform's secret manager.
+Set `PROSPECTING_API_URL` to a public browser path. For an authenticated upstream, use a relative same-origin path such as `/api/prospecting`; never put bearer tokens or other secrets in this value, generated `config.js`, frontend code, logs, fixtures, or browser storage. The proxy keeps `PROSPECTING_AGENT_API_URL` and `PROSPECTING_AGENT_API_TOKEN` server-side in the hosting platform's secret manager.
+
+See [Secure same-origin API proxy](docs/secure-api-proxy.md) for a Node handler pattern, environment separation, request validation, error handling, and CORS guidance.
 
 The browser sends:
 
@@ -122,3 +132,4 @@ Every material claim should include a public source URL and verification date. E
 ## Deployment
 
 This repository does not provide hosting. A deployment requires an explicitly approved target, `PROSPECTING_API_URL` configuration, and verification of both the public URL and deployed commit. A merged source commit alone is not proof of deployment.
+
